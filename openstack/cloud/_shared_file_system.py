@@ -143,7 +143,7 @@ class SharedFileSystemCloudMixin(_normalize.Normalizer):
         """
         data = self._share_client.get(
             '/shares/{id}'.format(id=id),
-            error_message="Error getting share type with ID {id}".format(id=id)
+            error_message="Error getting share with ID {id}".format(id=id)
         )
 
         share = self._get_and_munchify('share', data)
@@ -174,6 +174,21 @@ class SharedFileSystemCloudMixin(_normalize.Normalizer):
 
         """
         return _utils._get_entity(self, 'share_type', name_or_id, filters)
+
+    def get_share_type_by_id(self, id):
+        """ Get a share type by ID
+
+        :param id: ID of the share type.
+        :returns: A share type ``munch.Munch``.
+        """
+        data = self._share_client.get(
+            '/types/{id}'.format(id=id),
+            error_message="Error getting share type with ID {id}".format(id=id)
+        )
+
+        share_type = self._get_and_munchify('share_type', data)
+
+        return share_type
 
     def create_share(self, share_proto, size, wait=True, timeout=None,
                      **kwargs):
@@ -221,6 +236,46 @@ class SharedFileSystemCloudMixin(_normalize.Normalizer):
                     raise exc.OpenStackCloudException("Error in creating share")
 
         return self._normalize_share(share)
+
+    def create_share_type(self, name, spec_driver_handles_share_servers,
+                          spec_snapshot_support=None, is_public=True,
+                          extra_specs=None, **kwargs):
+        """Create a share type.
+
+        :param name: Name for the share type.
+        :param spec_driver_handles_share_servers: If true, it means that this
+               share driver can handle share servers.
+        :param spec_snapshot_support: If true, it means that this share driver
+               has support for snapshots.
+        :param is_public: If true, it means that this share type is public.
+        :param extra_specs: extra-spec keys for the share type.
+        :param kwargs: Keyword arguments as expected for manila client.
+
+        :returns: The created share type object.
+
+        :raises: OpenStackCloudException on operation error.
+        """
+        kwargs['name'] = name
+        # TODO(ruizink): The 'is_public' attribute needs has different values
+        # based on the API version
+        # "os-share-type-access:is_public" for API versions 1.0-2.6
+        # "share_type_access:is_public"
+        kwargs['os-share-type-access:is_public'] = is_public
+
+        kwargs['extra_specs'] = extra_specs if extra_specs else {}
+        kwargs['extra_specs'][
+            'driver_handles_share_servers'] = spec_driver_handles_share_servers
+        kwargs['extra_specs']['snapshot_support'] = spec_snapshot_support
+
+        payload = dict(share_type=kwargs)
+        data = self._share_client.post(
+            '/types',
+            json=dict(payload),
+            error_message='Error in creating share type')
+        share_type = self._get_and_munchify('share_type', data)
+        self.list_share_types.invalidate(self)
+
+        return share_type
 
     def update_share(self, name_or_id=None, display_name=None,
                      display_description=None, is_public=None):
@@ -279,7 +334,7 @@ class SharedFileSystemCloudMixin(_normalize.Normalizer):
         with _utils.shade_exceptions("Error in deleting share"):
             try:
                 if force:
-                    # TODO(santosm): handle microversions
+                    # TODO(ruizink): handle microversions
                     # If API version 1.0-2.6 is used then all share actions,
                     # defined below, should include prefix os- in top element
                     # of request JSON's body.
@@ -308,14 +363,55 @@ class SharedFileSystemCloudMixin(_normalize.Normalizer):
 
         return True
 
+    def delete_share_type(self, name_or_id=None):
+        """Delete a share type.
+
+        :param name_or_id: Name or unique ID of the share type.
+
+        :raises: OpenStackCloudException on operation error.
+        """
+
+        self.list_share_types.invalidate(self)
+        share_type = self.get_share_type(name_or_id)
+
+        if not share_type:
+            self.log.debug(
+                "Share type %(name_or_id)s does not exist",
+                {'name_or_id': name_or_id},
+                exc_info=True)
+            return False
+
+        with _utils.shade_exceptions("Error in deleting share type"):
+            try:
+                self._share_client.delete(
+                    'types/{id}'.format(id=share_type['id']))
+            except exc.OpenStackCloudURINotFound:
+                self.log.debug(
+                    "Share type {id} not found when deleting. Ignoring".format(
+                        id=share_type['id']))
+                return False
+
+        self.list_share_types.invalidate(self)
+
+        return True
+
     def get_share_id(self, name_or_id):
         share = self.get_share(name_or_id)
         if share:
             return share['id']
         return None
 
+    def get_share_type_id(self, name_or_id):
+        share_type = self.get_share_type(name_or_id)
+        if share_type:
+            return share_type['id']
+        return None
+
     def share_exists(self, name_or_id):
         return self.get_share(name_or_id) is not None
+
+    def share_type_exists(self, name_or_id):
+        return self.get_share_type(name_or_id) is not None
 
     def search_shares(self, name_or_id=None, filters=None):
         shares = self.list_shares()
