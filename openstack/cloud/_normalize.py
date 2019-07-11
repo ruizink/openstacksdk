@@ -962,6 +962,42 @@ class Normalizer(object):
             ret.append(self._normalize_server_usage(server_usage))
         return ret
 
+    def _normalize_shares(self, shares):
+        """Normalize Manila Shares"""
+        ret = []
+        for share in shares:
+            ret.append(self._normalize_share(share))
+        return ret
+
+    def _normalize_share(self, share):
+        """Normalize Manila Share"""
+        share = share.copy()
+
+        # Discard noise
+        self._remove_novaclient_artifacts(share)
+
+        # TODO(ruizink) Normalize this resource
+
+        return share
+
+    def _normalize_share_types(self, share_types):
+        """Normalize Manila Shares"""
+        ret = []
+        for share_type in share_types:
+            ret.append(self._normalize_share_type(share_type))
+        return ret
+
+    def _normalize_share_type(self, share_type):
+        """Normalize Manila Share"""
+        share_type = share_type.copy()
+
+        # Discard noise
+        self._remove_novaclient_artifacts(share_type)
+
+        # TODO(ruizink) Normalize this resource
+
+        return share_type
+
     def _normalize_coe_clusters(self, coe_clusters):
         ret = []
         for coe_cluster in coe_clusters:
