@@ -141,7 +141,7 @@ class Stack(resource.Resource):
         if preview:
             request_url = utils.urljoin(request_url, 'preview')
 
-        response = session.put(
+        response = session.patch(
             request_url, json=request.body, headers=request.headers,
             microversion=microversion)
 
